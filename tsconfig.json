@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "module": "None",
+    "target": "ES2017",
+    "lib": ["ES7"],
+    "noImplicitAny": true,
+    "removeComments": true,
+    "preserveConstEnums": true,
+    "outFile": "./tiled-nes.js",
+    "sourceMap": true
+  },
+  "files": ["tiled-nes.ts"]
+}
