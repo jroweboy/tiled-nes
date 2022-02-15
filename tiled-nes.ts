@@ -6,12 +6,17 @@ const attributeLayerName = "Attribute";
 const tileLayerName = "Tile";
 const defaultLayerNames = [tileLayerName,attributeLayerName];
 
+const mapPaletteProperty = "Palette";
 const paletteNamePrefix = "Palette ";
 const attributeTilesetName = "AttributeTileset";
 
 let globalPalette:string[] = new Array(16);
 let globalPalettePath:string;
-const globalLoadedCHR:Image[] = [];
+// interface ImageSource {
+//     image: Image,
+//     source?: string,
+// }
+let globalCHRCache: {[key: string]: Image} = {};
 
 // Crystalis town palettes because i just needed something here
 const defaultPalette : string[] = [
@@ -40,13 +45,22 @@ function paletteifyTileset(tileset: Tileset) {
     let image = new Image(tileset.image);
 }
 
+function isValidPalette(pal: string[]) {
+    if (!pal) {
+        return false;
+    }
+    // check that the string converts into 16 bytes that are all less than <=3f
+    if (pal.length != 16) {
+        return false;
+    }
+    if (pal.filter(s => 0x00 <= parseInt(s, 16) && parseInt(s, 16) <= 0x3f).length != 16) {
+        return false;
+    }
+    return true;
+}
+
 function tilesetLoaded(tileset:Tileset) {
     tiled.log("Loading tileset");
-    if (tileset.name == attributeTilesetName) {
-
-    } else {
-        paletteifyTileset(tileset);
-    }
 }
 
 // function createPalettePropertiesIfNotExist(map:TileMap) {
@@ -165,13 +179,13 @@ function createAttributeTileset(pal:string[]):Tileset {
     return tileset;
 }
 
-function createOrUpdateGlobalPalette(map:TileMap) {
+function createOrUpdateMapPalette(map:TileMap) {
     const tileset = map.tilesets.find(ts => ts.name == attributeTilesetName);
     if (!tileset) {
         tiled.log("Tileset missing, creating new one");
         const globalPalette = createAttributeTileset(defaultPalette);
         globalPalette.name = "Palette";
-        map.setProperty("Loaded Palette", "default");
+        map.setProperty(mapPaletteProperty, defaultPalette.join(","));
         map.addTileset(globalPalette);
         return;
     }
@@ -182,6 +196,18 @@ function createOrUpdateGlobalPalette(map:TileMap) {
     // }
 }
 
+function getMapPalette(map: TileMap): string[] {
+    const prop = map.property(mapPaletteProperty);
+    if (prop) {
+        const palette = prop.toString().split(",");
+        tiled.log(`palette prop: ${prop}`)
+        if (isValidPalette(palette)) {
+            return palette;
+        }
+    }
+    return defaultPalette;
+}
+
 function mapRegionEdited(map: TileMap, layer: TileLayer, r:region) {
     if (layer.name == attributeLayerName) {
         for (let rect of r.rects) {
@@ -190,9 +216,9 @@ function mapRegionEdited(map: TileMap, layer: TileLayer, r:region) {
     }
 }
 
-function mapLoaded(map:TileMap) {
+function newMapLoaded(map:TileMap) {
     tiled.log("Loading map");
-    createOrUpdateGlobalPalette(map);
+    createOrUpdateMapPalette(map);
     initMapLayers(map);
 }
 
@@ -211,39 +237,33 @@ function isMapDirty(map:TileMap): boolean {
             return true;
         }
     }
-    return false;
-}
-
-function isPalette(tileset:Tileset): boolean {
-    return false;
-}
-
-function checkForPaletteChange(): boolean {
-
+    tiled.log("checking is valid palette from map");
+    if (!isValidPalette(getMapPalette(map))) {
+        return true;
+    }
     return false;
 }
 
 function getCurrentPaletteOrDefault(): string[] {
-    if (globalPalettePath) {
-        tiled.log("palette " + globalPalettePath);
-        tiled.log("paletteasdas " + globalPalette);
-        return globalPalette;
+    const current = tiled.activeAsset;
+    if (current.isTileMap) {
+        return getMapPalette(current as TileMap);
     }
     return defaultPalette;
 }
 
 function assetLoaded(asset:Asset) {
+    tiled.log("asset loaded");
     if (asset.isTileset) {
         const tileset = asset as Tileset;
         // if (isPalette(tileset)) {
         //     // create or update global palette.
-            
         // }
         // asset.macro("Generating NES Tileset", () => tilesetLoaded(asset as Tileset));
     } else if (asset.isTileMap) {
         const map = asset as TileMap;
         if (isMapDirty(map)) {
-            asset.macro("Generating NES Tilemap", () => mapLoaded(asset as TileMap));
+            asset.macro("Generating NES Tilemap", () => newMapLoaded(asset as TileMap));
         }
         // The regionEdited signal is documented incorrectly. It sends two params (but typesig only mentions one)
         // @ts-ignore
@@ -330,11 +350,11 @@ tiled.registerTilesetFormat("neschr", {
                 }
             }
         }
-        globalLoadedCHR.push(im);
         const tileset = new Tileset();
         tileset.name = filename.substring(filename.lastIndexOf('/')+1);
         tileset.setTileSize(8,8); // must be called before loadFromImage
         tileset.loadFromImage(im, filename);
+        globalCHRCache[tileset.image] = im;
         return tileset;
     },
     write: (tileset, filename) => {
@@ -344,9 +364,14 @@ tiled.registerTilesetFormat("neschr", {
 });
 
 const loadPaletteAction = tiled.registerAction("ApplyPalette", action => {
-    globalLoadedCHR.forEach( im => {
+    // This menu action is on the Map menu, so we must be on a TileMap to use it...
+    // TODO double check for sanity in case they weasle around that with the console.
+    const map = tiled.activeAsset as TileMap;
+    map.usedTilesets().forEach( ts => {
         tiled.log("applying palette to image");
-        im.setColorTable(paletteToColor(globalPalette));
+        const im = globalCHRCache[ts.image];
+        im.setColorTable(getMapPalette(map));
+        ts.loadFromImage(im, ts.image);
     });
 });
 loadPaletteAction.enabled = false;

@@ -2,11 +2,12 @@ const name = 'tiled-nes';
 const attributeLayerName = "Attribute";
 const tileLayerName = "Tile";
 const defaultLayerNames = [tileLayerName, attributeLayerName];
+const mapPaletteProperty = "Palette";
 const paletteNamePrefix = "Palette ";
 const attributeTilesetName = "AttributeTileset";
 let globalPalette = new Array(16);
 let globalPalettePath;
-const globalLoadedCHR = [];
+let globalCHRCache = {};
 const defaultPalette = [
     "19", "27", "16", "0f",
     "19", "20", "28", "0f",
@@ -28,13 +29,20 @@ function paletteToColor(pal) {
 function paletteifyTileset(tileset) {
     let image = new Image(tileset.image);
 }
+function isValidPalette(pal) {
+    if (!pal) {
+        return false;
+    }
+    if (pal.length != 16) {
+        return false;
+    }
+    if (pal.filter(s => 0x00 <= parseInt(s, 16) && parseInt(s, 16) <= 0x3f).length != 16) {
+        return false;
+    }
+    return true;
+}
 function tilesetLoaded(tileset) {
     tiled.log("Loading tileset");
-    if (tileset.name == attributeTilesetName) {
-    }
-    else {
-        paletteifyTileset(tileset);
-    }
 }
 function initMapLayers(map) {
     let tileLayer = getLayerIfExists(map, tileLayerName);
@@ -122,16 +130,27 @@ function createAttributeTileset(pal) {
     }
     return tileset;
 }
-function createOrUpdateGlobalPalette(map) {
+function createOrUpdateMapPalette(map) {
     const tileset = map.tilesets.find(ts => ts.name == attributeTilesetName);
     if (!tileset) {
         tiled.log("Tileset missing, creating new one");
         const globalPalette = createAttributeTileset(defaultPalette);
         globalPalette.name = "Palette";
-        map.setProperty("Loaded Palette", "default");
+        map.setProperty(mapPaletteProperty, defaultPalette.join(","));
         map.addTileset(globalPalette);
         return;
     }
+}
+function getMapPalette(map) {
+    const prop = map.property(mapPaletteProperty);
+    if (prop) {
+        const palette = prop.toString().split(",");
+        tiled.log(`palette prop: ${prop}`);
+        if (isValidPalette(palette)) {
+            return palette;
+        }
+    }
+    return defaultPalette;
 }
 function mapRegionEdited(map, layer, r) {
     if (layer.name == attributeLayerName) {
@@ -139,9 +158,9 @@ function mapRegionEdited(map, layer, r) {
         }
     }
 }
-function mapLoaded(map) {
+function newMapLoaded(map) {
     tiled.log("Loading map");
-    createOrUpdateGlobalPalette(map);
+    createOrUpdateMapPalette(map);
     initMapLayers(map);
 }
 function getLayerIfExists(map, name) {
@@ -157,30 +176,28 @@ function isMapDirty(map) {
             return true;
         }
     }
-    return false;
-}
-function isPalette(tileset) {
-    return false;
-}
-function checkForPaletteChange() {
+    tiled.log("checking is valid palette from map");
+    if (!isValidPalette(getMapPalette(map))) {
+        return true;
+    }
     return false;
 }
 function getCurrentPaletteOrDefault() {
-    if (globalPalettePath) {
-        tiled.log("palette " + globalPalettePath);
-        tiled.log("paletteasdas " + globalPalette);
-        return globalPalette;
+    const current = tiled.activeAsset;
+    if (current.isTileMap) {
+        return getMapPalette(current);
     }
     return defaultPalette;
 }
 function assetLoaded(asset) {
+    tiled.log("asset loaded");
     if (asset.isTileset) {
         const tileset = asset;
     }
     else if (asset.isTileMap) {
         const map = asset;
         if (isMapDirty(map)) {
-            asset.macro("Generating NES Tilemap", () => mapLoaded(asset));
+            asset.macro("Generating NES Tilemap", () => newMapLoaded(asset));
         }
         map.regionEdited.connect((r, l) => mapRegionEdited(map, l, r));
     }
@@ -255,11 +272,11 @@ tiled.registerTilesetFormat("neschr", {
                 }
             }
         }
-        globalLoadedCHR.push(im);
         const tileset = new Tileset();
         tileset.name = filename.substring(filename.lastIndexOf('/') + 1);
         tileset.setTileSize(8, 8);
         tileset.loadFromImage(im, filename);
+        globalCHRCache[tileset.image] = im;
         return tileset;
     },
     write: (tileset, filename) => {
@@ -267,9 +284,12 @@ tiled.registerTilesetFormat("neschr", {
     },
 });
 const loadPaletteAction = tiled.registerAction("ApplyPalette", action => {
-    globalLoadedCHR.forEach(im => {
+    const map = tiled.activeAsset;
+    map.usedTilesets().forEach(ts => {
         tiled.log("applying palette to image");
-        im.setColorTable(paletteToColor(globalPalette));
+        const im = globalCHRCache[ts.image];
+        im.setColorTable(getMapPalette(map));
+        ts.loadFromImage(im, ts.image);
     });
 });
 loadPaletteAction.enabled = false;
