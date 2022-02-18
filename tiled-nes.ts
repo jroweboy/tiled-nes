@@ -6,9 +6,8 @@ const attributeLayerName = "Attribute";
 const tileLayerName = "Tile";
 const defaultLayerNames = [tileLayerName,attributeLayerName];
 
-const mapPaletteProperty = "Palette";
-const paletteNamePrefix = "Palette ";
-const attributeTilesetName = "AttributeTileset";
+const mapPaletteNamePrefix = "Palette ";
+const attributeTilesetName = "Palette";
 
 let globalPalette:string[] = new Array(16);
 let globalPalettePath:string;
@@ -62,23 +61,6 @@ function isValidPalette(pal: string[]) {
 function tilesetLoaded(tileset:Tileset) {
     tiled.log("Loading tileset");
 }
-
-// function createPalettePropertiesIfNotExist(map:TileMap) {
-//     for (let i=0; i<=3; ++i) {
-//         for (let j=1; j<=3; ++j) {
-//             let name = paletteNamePrefix+i+":"+j;
-//             if (!map.resolvedProperty(name)) {
-//                 tiled.log("Creating Default palette attribute: "+name);
-//                 map.setProperty(name, defaultPalette[i][j-1]);
-//             }
-//         }
-//     }
-//     let bgName = paletteNamePrefix + "BG";
-//     if (!map.resolvedProperty(bgName)) {
-//         tiled.log("Creating Default palette attribute: "+bgName);
-//         map.setProperty(bgName, defaultBGColor);
-//     }
-// }
 
 function initMapLayers(map:TileMap) {
     let tileLayer = getLayerIfExists(map, tileLayerName);
@@ -184,28 +166,61 @@ function createOrUpdateMapPalette(map:TileMap) {
     if (!tileset) {
         tiled.log("Tileset missing, creating new one");
         const globalPalette = createAttributeTileset(defaultPalette);
-        globalPalette.name = "Palette";
-        map.setProperty(mapPaletteProperty, defaultPalette.join(","));
+        globalPalette.name = attributeTilesetName;
+        map.setProperty(mapPaletteNamePrefix + "bg", defaultPalette[0]);
+        map.setProperty(mapPaletteNamePrefix + "0", defaultPalette.slice(1,4).join(","));
+        map.setProperty(mapPaletteNamePrefix + "1", defaultPalette.slice(5,8).join(","));
+        map.setProperty(mapPaletteNamePrefix + "2", defaultPalette.slice(9,12).join(","));
+        map.setProperty(mapPaletteNamePrefix + "3", defaultPalette.slice(13,16).join(","));
         map.addTileset(globalPalette);
-        return;
     }
-    // tiled.log("updating existing palette tileset");
+
+    // tiled.log("updating palette tileset");
     // for (let i=0; i<4; ++i) {
     //     const tile = tileset.tiles.find(t => t.resolvedProperty("Palette").toString() == ""+i);
     //     updateTileFromPalette(tile, pal.slice(i*4, i*4 + 4));
     // }
 }
 
-function getMapPalette(map: TileMap): string[] {
-    const prop = map.property(mapPaletteProperty);
-    if (prop) {
-        const palette = prop.toString().split(",");
-        tiled.log(`palette prop: ${prop}`)
+function reloadCHRAfterPaletteChange(map: TileMap) {
+    map.usedTilesets().forEach( ts => {
+        tiled.log("applying palette to image");
+        const im = globalCHRCache[ts.image];
+        if (!im) {
+            tiled.log(`failed to find image : ${im}`);
+        } else {
+            const propBg = map.property(mapPaletteNamePrefix + "bg");
+            const prop0 = map.property(mapPaletteNamePrefix + "0");
+            const prop1 = map.property(mapPaletteNamePrefix + "1");
+            const prop2 = map.property(mapPaletteNamePrefix + "2");
+            const prop3 = map.property(mapPaletteNamePrefix + "3");
+            tiled.log(`props: ${propBg} ${prop0} ${prop1} ${prop2} ${prop3}`);
+            const colorTable = paletteToColor(getMapPalette(map));
+            tiled.log(`setting to color table: ${colorTable}`);
+            im.setColorTable(colorTable);
+            ts.loadFromImage(im, ts.image);
+        }
+    });
+}
+
+function getMapPalette(map: TileMap): string[] | undefined {
+    const propBg = map.property(mapPaletteNamePrefix + "bg");
+    const prop0 = map.property(mapPaletteNamePrefix + "0");
+    const prop1 = map.property(mapPaletteNamePrefix + "1");
+    const prop2 = map.property(mapPaletteNamePrefix + "2");
+    const prop3 = map.property(mapPaletteNamePrefix + "3");
+    if (propBg && prop0&& prop1 && prop2 && prop3) {
+        const palette : string[] = new Array(16);
+        palette[0] = palette[4] = palette[8] = palette[12] = propBg.toString();
+        palette.splice(1, 3, ...prop0.toString().split(","));
+        palette.splice(5, 3, ...prop1.toString().split(","));
+        palette.splice(9, 3, ...prop2.toString().split(","));
+        palette.splice(13, 3, ...prop3.toString().split(","));
         if (isValidPalette(palette)) {
             return palette;
         }
     }
-    return defaultPalette;
+    return undefined;
 }
 
 function mapRegionEdited(map: TileMap, layer: TileLayer, r:region) {
@@ -216,10 +231,16 @@ function mapRegionEdited(map: TileMap, layer: TileLayer, r:region) {
     }
 }
 
+function mapModified(map: TileMap) {
+    tiled.log(`map modified: ${map.fileName}`);
+    reloadCHRAfterPaletteChange(map);
+}
+
 function newMapLoaded(map:TileMap) {
     tiled.log("Loading map");
     createOrUpdateMapPalette(map);
     initMapLayers(map);
+    map.modifiedChanged.connect(() => mapModified(map));
 }
 
 function getLayerIfExists(map:TileMap, name:string):Layer | undefined {
@@ -244,16 +265,19 @@ function isMapDirty(map:TileMap): boolean {
     return false;
 }
 
-function getCurrentPaletteOrDefault(): string[] {
+function getCurrentMapPaletteOrDefault(): string[] {
     const current = tiled.activeAsset;
-    if (current.isTileMap) {
-        return getMapPalette(current as TileMap);
+    if (current && current.isTileMap) {
+        const pal = getMapPalette(current as TileMap);
+        if (pal) {
+            return pal;
+        }
     }
     return defaultPalette;
 }
 
 function assetLoaded(asset:Asset) {
-    tiled.log("asset loaded");
+    tiled.log(`asset loaded ${asset.fileName}`);
     if (asset.isTileset) {
         const tileset = asset as Tileset;
         // if (isPalette(tileset)) {
@@ -262,12 +286,21 @@ function assetLoaded(asset:Asset) {
         // asset.macro("Generating NES Tileset", () => tilesetLoaded(asset as Tileset));
     } else if (asset.isTileMap) {
         const map = asset as TileMap;
+        map.modifiedChanged.connect(() => mapModified(map));
         if (isMapDirty(map)) {
             asset.macro("Generating NES Tilemap", () => newMapLoaded(asset as TileMap));
         }
         // The regionEdited signal is documented incorrectly. It sends two params (but typesig only mentions one)
         // @ts-ignore
         map.regionEdited.connect((r:region, l: TileLayer) => mapRegionEdited(map, l, r));
+        map.usedTilesets().forEach(ts => {
+            if (ts.property("isCHRTileset")) {
+                // Force a reload to get the original image added to the CHR cache
+                tiled.log(`forcing a reload for ${ts.name}`);
+                tiled.open(ts.fileName);
+                // tiled.reload(ts);
+            }
+        });
     }
 }
 
@@ -314,6 +347,7 @@ tiled.registerTilesetFormat("neschr", {
     name: "NES CHR",
     extension: "chr",
     read: (filename) => {
+        tiled.log(`loading chr: ${filename}`);
         const file = new BinaryFile(filename, BinaryFile.ReadOnly);
         const buffer = file.readAll();
         const tileCount = buffer.byteLength / 16; // 16 bytes per tile
@@ -323,10 +357,10 @@ tiled.registerTilesetFormat("neschr", {
 
         // Create the new indexed image that with a default grayscale palette color
         // Typescript typing is wrong, Image.Format_Indexed8 converts to a number just fine
-        // * 2 because we are duplicating the image 
+        // * 4 because we are duplicating the image vertically 4 times
         // @ts-ignore
-        const im = new Image(pixelsPerTile * tilesPerRow * 2, pixelsPerTile * tileColumns * 2, Image.Format_Indexed8);
-        im.setColorTable(paletteToColor(getCurrentPaletteOrDefault()));
+        const im = new Image(pixelsPerTile * tilesPerRow, pixelsPerTile * tileColumns * 4, Image.Format_Indexed8);
+        im.setColorTable(paletteToColor(getCurrentMapPaletteOrDefault()));
 
         const view = new Uint8Array(buffer);
         for (let n=0; n < tileCount; ++n) {
@@ -341,12 +375,11 @@ tiled.registerTilesetFormat("neschr", {
                     const bit0 = (plane0>>pixelbit) & 1;
                     const bit1 = ((plane1>>pixelbit) & 1) << 1;
                     const index = bit0 | bit1;
-                    const offX = tilesPerRow * pixelsPerTile;
                     const offY = tileColumns * pixelsPerTile;
-                    im.setPixel(x + i,        y + j,        index);
-                    im.setPixel(x + i + offX, y + j,        index + 4);
-                    im.setPixel(x + i,        y + j + offY, index + 8);
-                    im.setPixel(x + i + offX, y + j + offY, index + 12);
+                    im.setPixel(x + i, y + j,            index);
+                    im.setPixel(x + i, y + j + offY,     index + 4);
+                    im.setPixel(x + i, y + j + offY * 2, index + 8);
+                    im.setPixel(x + i, y + j + offY * 3, index + 12);
                 }
             }
         }
@@ -354,7 +387,13 @@ tiled.registerTilesetFormat("neschr", {
         tileset.name = filename.substring(filename.lastIndexOf('/')+1);
         tileset.setTileSize(8,8); // must be called before loadFromImage
         tileset.loadFromImage(im, filename);
+        tiled.log("saving in global chr cache");
         globalCHRCache[tileset.image] = im;
+        for (const tile of tileset.tiles) {
+            const palette = Math.floor(tile.id / (tileColumns*tilesPerRow));
+            tile.setProperty("Palette", palette);
+        }
+        tileset.setProperty("isCHRTileset", true);
         return tileset;
     },
     write: (tileset, filename) => {
@@ -367,12 +406,7 @@ const loadPaletteAction = tiled.registerAction("ApplyPalette", action => {
     // This menu action is on the Map menu, so we must be on a TileMap to use it...
     // TODO double check for sanity in case they weasle around that with the console.
     const map = tiled.activeAsset as TileMap;
-    map.usedTilesets().forEach( ts => {
-        tiled.log("applying palette to image");
-        const im = globalCHRCache[ts.image];
-        im.setColorTable(getMapPalette(map));
-        ts.loadFromImage(im, ts.image);
-    });
+    reloadCHRAfterPaletteChange(map);
 });
 loadPaletteAction.enabled = false;
 loadPaletteAction.text = "Apply Global Palette";
