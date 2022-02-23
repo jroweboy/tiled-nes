@@ -6,13 +6,6 @@ const mapPaletteNamePrefix = "Palette ";
 const attributeTilesetName = "Palette";
 let globalPalette = new Array(16);
 let globalPalettePath;
-let globalCHRCache = {};
-const defaultPalette = [
-    "19", "27", "16", "0f",
-    "19", "20", "28", "0f",
-    "19", "3a", "1b", "0f",
-    "19", "30", "11", "0f",
-];
 function RGB2Hex(r, g, b) {
     return 0xff << 24 | r << 16 | g << 8 | b << 0;
 }
@@ -35,55 +28,20 @@ function isValidPalette(pal) {
     if (pal.length != 16) {
         return false;
     }
-    if (pal.filter(s => 0x00 <= parseInt(s, 16) && parseInt(s, 16) <= 0x3f).length != 16) {
+    if (pal.filter(s => lookupPaletteToColor[s] !== undefined).length != 16) {
         return false;
     }
     return true;
 }
+function chunk(str, size) {
+    return str.match(new RegExp('.{1,' + size + '}', 'g'));
+}
+function hexstrToBytes(str) {
+    const bytes = chunk(str, 2).map(s => parseInt(s, 16));
+    return new Uint8Array(bytes);
+}
 function tilesetLoaded(tileset) {
     tiled.log("Loading tileset");
-}
-function initMapLayers(map) {
-    let tileLayer = getLayerIfExists(map, tileLayerName);
-    if (!tileLayer || !tileLayer.isTileLayer) {
-        tiled.log("Map doesn't have " + tileLayerName + " layer. Adding now");
-        tileLayer = new TileLayer(tileLayerName);
-        map.addLayer(tileLayer);
-    }
-    let attributeLayer = getLayerIfExists(map, attributeLayerName);
-    if (!attributeLayer || !attributeLayer.isTileLayer) {
-        tiled.log("Map doesn't have " + attributeLayerName + " layer. Adding now");
-        attributeLayer = new TileLayer(attributeLayerName);
-        const atl = attributeLayer;
-        map.addLayer(atl);
-        atl.locked = true;
-        atl.visible = false;
-        const attrtiles = map.tilesets.find(ts => ts.name == attributeTilesetName);
-        const defaultPaletteTile = attrtiles.tiles.find(tile => tile.resolvedProperty("Palette").toString() == "0");
-        const editor = atl.edit();
-        for (let w = 0; w < atl.width; ++w) {
-            for (let h = 0; h < atl.height; ++h) {
-                editor.setTile(w, h, defaultPaletteTile);
-            }
-        }
-        editor.apply();
-    }
-    let width = attributeLayer.resolvedProperty("AttributeWidth");
-    if (!width || !(parseInt(width.toString()))) {
-        attributeLayer.setProperty("AttributeWidth", 16);
-    }
-    let height = attributeLayer.resolvedProperty("AttributeHeight");
-    if (!height || !(parseInt(height.toString()))) {
-        attributeLayer.setProperty("AttributeHeight", 16);
-    }
-    let offsetX = attributeLayer.resolvedProperty("AttributeOffsetX");
-    if (!offsetX || !(parseInt(offsetX.toString()))) {
-        attributeLayer.setProperty("AttributeOffsetX", 0);
-    }
-    let offsetY = attributeLayer.resolvedProperty("AttributeOffsetY");
-    if (!offsetY || !(parseInt(offsetY.toString()))) {
-        attributeLayer.setProperty("AttributeOffsetY", 0);
-    }
 }
 function drawFilledSquare(im, index, x, y, size) {
     for (let i = x; i < x + size; ++i) {
@@ -115,7 +73,7 @@ function updateTileFromPalette(tile, pal) {
         tile.setProperty("Palette Color " + j, pal[j]);
     }
 }
-function createAttributeTileset(pal) {
+function createPaletteTileset(pal) {
     const tileset = new Tileset();
     tiled.log("adding new tiles");
     const tile = tileset.addTile();
@@ -129,40 +87,12 @@ function createAttributeTileset(pal) {
     }
     return tileset;
 }
-function createOrUpdateMapPalette(map) {
-    const tileset = map.tilesets.find(ts => ts.name == attributeTilesetName);
-    if (!tileset) {
-        tiled.log("Tileset missing, creating new one");
-        const globalPalette = createAttributeTileset(defaultPalette);
-        globalPalette.name = attributeTilesetName;
-        map.setProperty(mapPaletteNamePrefix + "bg", defaultPalette[0]);
-        map.setProperty(mapPaletteNamePrefix + "0", defaultPalette.slice(1, 4).join(","));
-        map.setProperty(mapPaletteNamePrefix + "1", defaultPalette.slice(5, 8).join(","));
-        map.setProperty(mapPaletteNamePrefix + "2", defaultPalette.slice(9, 12).join(","));
-        map.setProperty(mapPaletteNamePrefix + "3", defaultPalette.slice(13, 16).join(","));
-        map.addTileset(globalPalette);
-    }
-}
-function reloadCHRAfterPaletteChange(map) {
-    map.usedTilesets().forEach(ts => {
-        tiled.log("applying palette to image");
-        const im = globalCHRCache[ts.image];
-        if (!im) {
-            tiled.log(`failed to find image : ${im}`);
-        }
-        else {
-            const propBg = map.property(mapPaletteNamePrefix + "bg");
-            const prop0 = map.property(mapPaletteNamePrefix + "0");
-            const prop1 = map.property(mapPaletteNamePrefix + "1");
-            const prop2 = map.property(mapPaletteNamePrefix + "2");
-            const prop3 = map.property(mapPaletteNamePrefix + "3");
-            tiled.log(`props: ${propBg} ${prop0} ${prop1} ${prop2} ${prop3}`);
-            const colorTable = paletteToColor(getMapPalette(map));
-            tiled.log(`setting to color table: ${colorTable}`);
-            im.setColorTable(colorTable);
-            ts.loadFromImage(im, ts.image);
-        }
-    });
+function setMapPalette(map, palette) {
+    map.setProperty(mapPaletteNamePrefix + "bg", palette[0]);
+    map.setProperty(mapPaletteNamePrefix + "0", palette.slice(1, 4).join(","));
+    map.setProperty(mapPaletteNamePrefix + "1", palette.slice(5, 8).join(","));
+    map.setProperty(mapPaletteNamePrefix + "2", palette.slice(9, 12).join(","));
+    map.setProperty(mapPaletteNamePrefix + "3", palette.slice(13, 16).join(","));
 }
 function getMapPalette(map) {
     const propBg = map.property(mapPaletteNamePrefix + "bg");
@@ -189,16 +119,6 @@ function mapRegionEdited(map, layer, r) {
         }
     }
 }
-function mapModified(map) {
-    tiled.log(`map modified: ${map.fileName}`);
-    reloadCHRAfterPaletteChange(map);
-}
-function newMapLoaded(map) {
-    tiled.log("Loading map");
-    createOrUpdateMapPalette(map);
-    initMapLayers(map);
-    map.modifiedChanged.connect(() => mapModified(map));
-}
 function getLayerIfExists(map, name) {
     let layer = map.layers.find(lay => lay.name == name);
     if (layer && layer.isTileLayer)
@@ -218,144 +138,120 @@ function isMapDirty(map) {
     }
     return false;
 }
-function getCurrentMapPaletteOrDefault() {
-    const current = tiled.activeAsset;
-    if (current && current.isTileMap) {
-        const pal = getMapPalette(current);
-        if (pal) {
-            return pal;
+function unRLE(d) {
+    let buffer = "";
+    let current = "";
+    let i = 0;
+    while (i < d.length) {
+        if (d[i] === "[") {
+            ++i;
+            const nextI = d.indexOf("]", i);
+            const rle = parseInt(d.slice(i, nextI), 16) - 1;
+            buffer += current.repeat(rle);
+            i = nextI + 1;
+        }
+        else {
+            current = d.slice(i, i + 2);
+            buffer += current;
+            i += 2;
         }
     }
-    return defaultPalette;
+    return buffer;
 }
-function assetLoaded(asset) {
-    tiled.log(`asset loaded ${asset.fileName}`);
-    if (asset.isTileset) {
-        const tileset = asset;
-    }
-    else if (asset.isTileMap) {
-        const map = asset;
-        map.modifiedChanged.connect(() => mapModified(map));
-        if (isMapDirty(map)) {
-            asset.macro("Generating NES Tilemap", () => newMapLoaded(asset));
-        }
-        map.regionEdited.connect((r, l) => mapRegionEdited(map, l, r));
-        map.usedTilesets().forEach(ts => {
-            if (ts.property("isCHRTileset")) {
-                tiled.log(`forcing a reload for ${ts.name}`);
-                tiled.open(ts.fileName);
+function createImageFromCHR(buffer, palette, paletteIdx) {
+    const tileCount = buffer.byteLength / 16;
+    const pixelsPerTile = 8;
+    const tilesPerRow = 16;
+    const tileColumns = tileCount / tilesPerRow;
+    const im = new Image(pixelsPerTile * tilesPerRow, pixelsPerTile * tileColumns, Image.Format_Indexed8);
+    im.setColorTable(paletteToColor(palette));
+    const view = new Uint8Array(buffer);
+    for (let n = 0; n < tileCount; ++n) {
+        const offset = n * 16;
+        const x = (n % 16) * 8;
+        const y = Math.floor(n / 16) * 8;
+        for (let j = 0; j < 8; ++j) {
+            const plane0 = view[offset + j];
+            const plane1 = view[offset + j + 8];
+            for (let i = 0; i < 8; ++i) {
+                const pixelbit = 7 - i;
+                const bit0 = (plane0 >> pixelbit) & 1;
+                const bit1 = ((plane1 >> pixelbit) & 1) << 1;
+                const color = (bit0 | bit1) + (paletteIdx * 4);
+                im.setPixel(x + i, y + j, color);
             }
-        });
-    }
-}
-tiled.registerTilesetFormat("nespal", {
-    name: "NES Palette",
-    extension: "pal",
-    read: (filename) => {
-        const file = new BinaryFile(filename, BinaryFile.ReadOnly);
-        const buffer = file.readAll();
-        file.close();
-        if (buffer.byteLength != 16) {
-            tiled.error("Imported NES Palette is not 16 bytes!", () => { });
-            return null;
         }
-        const palette = new Uint8Array(buffer, 0, 16);
-        const hex = Array.from(palette).map(v => ("0" + v.toString(16)).slice(-2));
-        const tileset = createAttributeTileset(hex);
-        return tileset;
-    },
-    write: (tileset, filename) => {
-        const bgtile = tileset.tiles.find(tile => tile.property("Palette").toString() == "bg");
-        const bgcolor = parseInt(bgtile.property("Palette Color").toString(), 16);
-        const bytes = new ArrayBuffer(16);
-        const buffer = new Uint8Array(bytes);
+    }
+    return im;
+}
+function createTilesetFromCHR(buffer, palette, paletteIdx) {
+    const tileset = new Tileset();
+    tileset.setTileSize(8, 8);
+    const im = createImageFromCHR(buffer, palette, paletteIdx);
+    tileset.loadFromImage(im);
+    tileset.setProperty("isCHRTileset", true);
+    return tileset;
+}
+tiled.registerMapFormat("nexxt", {
+    name: "NEXXT Session",
+    extension: "nss",
+    read: (filename) => {
+        const file = new TextFile(filename, TextFile.ReadOnly);
+        const nss = new Map(file.readAll().split("\n").filter(s => s.includes("=")).map(s => s.split("=")).map(s => [s[0], s[1]]));
+        const map = new TileMap();
+        map.setTileSize(8, 8);
+        const width = parseInt(nss.get("VarSpriteGridX"));
+        const height = parseInt(nss.get("VarSpriteGridY"));
+        map.setSize(width, height);
+        const palettes = [];
+        const paletteIdx = parseInt(nss.get("VarPalActive")) - 1;
+        const pal = chunk(nss.get("Palette").slice(paletteIdx * 32, (paletteIdx + 1) * 32), 2);
+        setMapPalette(map, pal);
+        const paletteTileset = createPaletteTileset(pal);
+        paletteTileset.name = "Palette";
+        map.addTileset(paletteTileset);
+        const chrBuffer = hexstrToBytes(unRLE(nss.get("CHRMain")));
+        const chrs = [];
         for (let i = 0; i < 4; ++i) {
-            const palette = tileset.tiles.find(tile => tile.property("Palette").toString() == "" + i);
-            buffer[i * 4] = bgcolor;
-            for (let j = 1; j < 4; ++j) {
-                const color = palette.property("Palette Color " + j).toString();
-                const val = parseInt(color, 16);
-                buffer[i * 4 + j] = val;
+            const chr = createTilesetFromCHR(chrBuffer, pal, i);
+            chr.name = `CHR (Pal ${i + 1})`;
+            chrs.push(chr);
+            map.addTileset(chr);
+        }
+        const attrtable = new Uint8Array(hexstrToBytes(unRLE(nss.get("AttrTable"))));
+        const attrs = Array.from(Array(height), () => new Array(width));
+        const attrLayer = new TileLayer("Attribute");
+        const attrEdit = attrLayer.edit();
+        for (let y = 0; y < height; ++y) {
+            for (let x = 0; x < width; ++x) {
+                const coarseIdx = Math.floor(Math.floor(y / 4) * (width / 4) + x / 4);
+                const xshift = ((x % 4) < 2) ? 0 : 2;
+                const yshift = ((y % 4) < 2) ? 0 : 4;
+                const mask = 0b11 << (xshift + yshift);
+                const palette = (attrtable[coarseIdx] & mask) >> (xshift + yshift);
+                tiled.log(`x: ${x} y: ${y} idx: ${coarseIdx} attr: ${attrtable[coarseIdx]} table: ${palette}`);
+                attrs[y][x] = palette;
+                attrEdit.setTile(x, y, paletteTileset.tile(palette + 1));
             }
         }
-        const file = new BinaryFile(filename, BinaryFile.WriteOnly);
-        file.write(bytes);
-        file.commit();
-        return "";
-    },
-});
-tiled.registerTilesetFormat("neschr", {
-    name: "NES CHR",
-    extension: "chr",
-    read: (filename) => {
-        tiled.log(`loading chr: ${filename}`);
-        const file = new BinaryFile(filename, BinaryFile.ReadOnly);
-        const buffer = file.readAll();
-        const tileCount = buffer.byteLength / 16;
-        const pixelsPerTile = 8;
-        const tilesPerRow = 16;
-        const tileColumns = tileCount / tilesPerRow;
-        const im = new Image(pixelsPerTile * tilesPerRow, pixelsPerTile * tileColumns * 4, Image.Format_Indexed8);
-        im.setColorTable(paletteToColor(getCurrentMapPaletteOrDefault()));
-        const view = new Uint8Array(buffer);
-        for (let n = 0; n < tileCount; ++n) {
-            const offset = n * 16;
-            const x = (n % 16) * 8;
-            const y = Math.floor(n / 16) * 8;
-            for (let j = 0; j < 8; ++j) {
-                const plane0 = view[offset + j];
-                const plane1 = view[offset + j + 8];
-                for (let i = 0; i < 8; ++i) {
-                    const pixelbit = 7 - i;
-                    const bit0 = (plane0 >> pixelbit) & 1;
-                    const bit1 = ((plane1 >> pixelbit) & 1) << 1;
-                    const index = bit0 | bit1;
-                    const offY = tileColumns * pixelsPerTile;
-                    im.setPixel(x + i, y + j, index);
-                    im.setPixel(x + i, y + j + offY, index + 4);
-                    im.setPixel(x + i, y + j + offY * 2, index + 8);
-                    im.setPixel(x + i, y + j + offY * 3, index + 12);
-                }
+        attrEdit.apply();
+        const nmt = unRLE(nss.get("NameTable"));
+        const bgLayer = new TileLayer("Background");
+        const bgEdit = bgLayer.edit();
+        const tiles = chunk(nmt, 2).map(s => parseInt(s, 16));
+        for (let y = 0; y < height; ++y) {
+            for (let x = 0; x < width; ++x) {
+                const idx = tiles[y * width + x];
+                const attr = attrs[y][x];
+                bgEdit.setTile(x, y, chrs[attr].tile(idx));
             }
         }
-        const tileset = new Tileset();
-        tileset.name = filename.substring(filename.lastIndexOf('/') + 1);
-        tileset.setTileSize(8, 8);
-        tileset.loadFromImage(im, filename);
-        tiled.log("saving in global chr cache");
-        globalCHRCache[tileset.image] = im;
-        for (const tile of tileset.tiles) {
-            const palette = Math.floor(tile.id / (tileColumns * tilesPerRow));
-            tile.setProperty("Palette", palette);
-        }
-        tileset.setProperty("isCHRTileset", true);
-        return tileset;
-    },
-    write: (tileset, filename) => {
-        return "";
-    },
-});
-const loadPaletteAction = tiled.registerAction("ApplyPalette", action => {
-    const map = tiled.activeAsset;
-    reloadCHRAfterPaletteChange(map);
-});
-loadPaletteAction.enabled = false;
-loadPaletteAction.text = "Apply Global Palette";
-loadPaletteAction.iconVisibleInMenu = false;
-const setPaletteAction = tiled.registerAction("SetPalette", action => {
-    const pal = tiled.activeAsset;
-    for (let i = 0; i < 4; ++i) {
-        globalPalette[i * 4] = pal.tiles.find(t => t.property("Palette") == "bg").property("Palette Color").toString();
-        globalPalette[i * 4 + 1] = pal.tiles.find(t => t.property("Palette") == "" + i).property("Palette Color 1").toString();
-        globalPalette[i * 4 + 2] = pal.tiles.find(t => t.property("Palette") == "" + i).property("Palette Color 2").toString();
-        globalPalette[i * 4 + 3] = pal.tiles.find(t => t.property("Palette") == "" + i).property("Palette Color 3").toString();
+        bgEdit.apply();
+        map.addLayer(bgLayer);
+        map.addLayer(attrLayer);
+        return map;
     }
-    globalPalettePath = pal.fileName;
-    loadPaletteAction.enabled = true;
 });
-setPaletteAction.enabled = true;
-setPaletteAction.text = "Set As Global Palette";
-setPaletteAction.iconVisibleInMenu = false;
 for (let i = 0; i < 4; ++i) {
     const action = tiled.registerAction("Palette" + i, (action) => {
         action.id;
@@ -367,17 +263,10 @@ for (let i = 0; i < 4; ++i) {
     action.shortcut = "Shift+" + (i + 1);
 }
 tiled.extendMenu("Map", [
-    { action: "ApplyPalette", before: "MapProperties" },
-    { action: "Palette0" },
+    { action: "Palette0", before: "MapProperties" },
     { action: "Palette1" },
     { action: "Palette2" },
     { action: "Palette3" },
     { separator: true },
 ]);
-tiled.extendMenu("Tileset", [
-    { action: "SetPalette", before: "TilesetProperties" },
-    { separator: true },
-]);
-tiled.assetCreated.connect(assetLoaded);
-tiled.assetOpened.connect(assetLoaded);
 //# sourceMappingURL=tiled-nes.js.map
