@@ -20,34 +20,93 @@ let globalPalettePath:string;
 //     "19", "30", "11", "0f",
 // ];
 
-function RGB2Hex(r: number, g: number, b: number): number {
-    return 0xff << 24 | r << 16 | g << 8 | b << 0;
+function num2Hexstr(num: number): string {
+    return ("0" + num.toString(16)).slice(-2);
 }
 
-const lookupPaletteToColor: { [key: string]: number } = {
-    "00": RGB2Hex( 84,  84,  84), "01": RGB2Hex(  0,  30, 116), "02": RGB2Hex(  8,  16, 144), "03": RGB2Hex( 48,   0, 136), "04": RGB2Hex( 68,   0, 100), "05": RGB2Hex( 92,   0,  48), "06": RGB2Hex( 84,   4,   0), "07": RGB2Hex( 60,  24,   0), "08": RGB2Hex( 32,  42,   0), "09": RGB2Hex(  8,  58,   0), "0a": RGB2Hex(  0,  64,   0), "0b": RGB2Hex(  0,  60,   0), "0c": RGB2Hex(  0,  50,  60), "0d": RGB2Hex(  0,   0,   0), "0e": RGB2Hex(  0,   0,   0), "0f": RGB2Hex(  0,   0,   0),
-    "10": RGB2Hex(152, 150, 152), "11": RGB2Hex(  8,  76, 196), "12": RGB2Hex( 48,  50, 236), "13": RGB2Hex( 92,  30, 228), "14": RGB2Hex(136,  20, 176), "15": RGB2Hex(160,  20, 100), "16": RGB2Hex(152,  34,  32), "17": RGB2Hex(120,  60,   0), "18": RGB2Hex( 84,  90,   0), "19": RGB2Hex( 40, 114,   0), "1a": RGB2Hex(  8, 124,   0), "1b": RGB2Hex(  0, 118,  40), "1c": RGB2Hex(  0, 102, 120), "1d": RGB2Hex(  0,   0,   0), "1e": RGB2Hex(  0,   0,   0), "1f": RGB2Hex(  0,   0,   0),
-    "20": RGB2Hex(236, 238, 236), "21": RGB2Hex( 76, 154, 236), "22": RGB2Hex(120, 124, 236), "23": RGB2Hex(176,  98, 236), "24": RGB2Hex(228,  84, 236), "25": RGB2Hex(236,  88, 180), "26": RGB2Hex(236, 106, 100), "27": RGB2Hex(212, 136,  32), "28": RGB2Hex(160, 170,   0), "29": RGB2Hex(116, 196,   0), "2a": RGB2Hex( 76, 208,  32), "2b": RGB2Hex( 56, 204, 108), "2c": RGB2Hex( 56, 180, 204), "2d": RGB2Hex( 60,  60,  60), "2e": RGB2Hex(  0,   0,   0), "2f": RGB2Hex(  0,   0,   0),
-    "30": RGB2Hex(236, 238, 236), "31": RGB2Hex(168, 204, 236), "32": RGB2Hex(188, 188, 236), "33": RGB2Hex(212, 178, 236), "34": RGB2Hex(236, 174, 236), "35": RGB2Hex(236, 174, 212), "36": RGB2Hex(236, 180, 176), "37": RGB2Hex(228, 196, 144), "38": RGB2Hex(204, 210, 120), "39": RGB2Hex(180, 222, 120), "3a": RGB2Hex(168, 226, 144), "3b": RGB2Hex(152, 226, 180), "3c": RGB2Hex(160, 214, 228), "3d": RGB2Hex(160, 162, 160), "3e": RGB2Hex(  0,   0,   0), "3f": RGB2Hex(  0,   0,   0),
+function RGB2Hex(rgb: number[]): number {
+    return 0xff << 24 | rgb[0] << 16 | rgb[1] << 8 | rgb[2] << 0;
+}
+
+const basePaletteColors: number[][] = [
+    [ 84,  84,  84], [  0,  30, 116], [  8,  16, 144], [ 48,   0, 136], [ 68,   0, 100], [ 92,   0,  48], [ 84,   4,   0], [ 60,  24,   0], [ 32,  42,   0], [  8,  58,   0], [  0,  64,   0], [  0,  60,   0], [  0,  50,  60], [  0,   0,   0], [  0,   0,   0], [  0,   0,   0],
+    [152, 150, 152], [  8,  76, 196], [ 48,  50, 236], [ 92,  30, 228], [136,  20, 176], [160,  20, 100], [152,  34,  32], [120,  60,   0], [ 84,  90,   0], [ 40, 114,   0], [  8, 124,   0], [  0, 118,  40], [  0, 102, 120], [  0,   0,   0], [  0,   0,   0], [  0,   0,   0],
+    [236, 238, 236], [ 76, 154, 236], [120, 124, 236], [176,  98, 236], [228,  84, 236], [236,  88, 180], [236, 106, 100], [212, 136,  32], [160, 170,   0], [116, 196,   0], [ 76, 208,  32], [ 56, 204, 108], [ 56, 180, 204], [ 60,  60,  60], [  0,   0,   0], [  0,   0,   0],
+    [236, 238, 236], [168, 204, 236], [188, 188, 236], [212, 178, 236], [236, 174, 236], [236, 174, 212], [236, 180, 176], [228, 196, 144], [204, 210, 120], [180, 222, 120], [168, 226, 144], [152, 226, 180], [160, 214, 228], [160, 162, 160], [  0,   0,   0], [  0,   0,   0],
+];
+
+const emphasisMultiplier: number[][] = [
+	[100.0,100.0,100.0],
+	[ 74.3, 91.5,123.9],
+	[ 88.2,108.6, 79.4],
+	[ 65.3, 98.0,101.9],
+	[127.7,102.6, 90.5],
+	[ 97.9, 90.8,102.3],
+	[100.1, 98.7, 74.1],
+	[ 75.0, 75.0, 75.0],
+];
+
+class Emphasis {
+    constructor(r: boolean, g: boolean, b: boolean) {
+        this.r = r; this.g = g; this.b = b;
+    }
+    r: boolean;
+    g: boolean;
+    b: boolean;
+    get():number {
+        return (this.r?1:0) << 2 | (this.g?1:0) << 1 | (this.b?1:0);
+    };
 };
 
-function paletteToColor(pal: string[]): number[] {
-    return pal.map(s => lookupPaletteToColor[s.toLowerCase()]);
+type Palette = {
+    p: number[],
+    em: Emphasis,
+};
+
+function clamp(n: number, min: number, max: number): number {
+    return Math.min(Math.max(n, min), max);
+}
+
+function RGB2HexWithEmphasis(rgb: number[], emp: Emphasis): number {
+    const em = emphasisMultiplier[emp.get()];
+    return RGB2Hex(rgb.map((c, i) => clamp(Math.floor(c * (em[i] / 100.0)), 0, 255)));
+}
+
+function GetColor(idx: number, em: Emphasis): number {
+    return lookupPaletteToColor[em.get()][idx];
+}
+
+/**
+ * 2 layer lookup for the RGB color for a palette color. First array is emphasis bits, second is palette idx
+ */
+const lookupPaletteToColor: number[][] = [
+    basePaletteColors.map(x => RGB2HexWithEmphasis(x, new Emphasis(false, false, false))),
+    basePaletteColors.map(x => RGB2HexWithEmphasis(x, new Emphasis(false, false,  true))),
+    basePaletteColors.map(x => RGB2HexWithEmphasis(x, new Emphasis(false,  true, false))),
+    basePaletteColors.map(x => RGB2HexWithEmphasis(x, new Emphasis(false,  true,  true))),
+    basePaletteColors.map(x => RGB2HexWithEmphasis(x, new Emphasis( true, false, false))),
+    basePaletteColors.map(x => RGB2HexWithEmphasis(x, new Emphasis( true, false,  true))),
+    basePaletteColors.map(x => RGB2HexWithEmphasis(x, new Emphasis( true,  true, false))),
+    basePaletteColors.map(x => RGB2HexWithEmphasis(x, new Emphasis( true,  true,  true))),
+];
+
+function paletteToColor(pal: Palette): number[] {
+    return pal.p.map(n => lookupPaletteToColor[pal.em.get()][n]);
 }
 
 function paletteifyTileset(tileset: Tileset) {
     let image = new Image(tileset.image);
 }
 
-function isValidPalette(pal: string[]) {
-    if (!pal) {
+function isValidPalette(pal: Palette) {
+    if (!pal.p) {
         return false;
     }
-    // check that the string converts into 16 bytes that are all less than <=3f
-    if (pal.length != 16) {
+    // check that the string converts into 16 bytes that are all in the generated lookup
+    if (pal.p.length != 16) {
         return false;
     }
-    if (pal.filter(s => lookupPaletteToColor[s] !== undefined).length != 16) {
+    if (pal.p.filter(s => lookupPaletteToColor[s] !== undefined).length != 16) {
         return false;
     }
     return true;
@@ -60,6 +119,10 @@ function chunk(str: string, size: number): string[] {
 function hexstrToBytes(str: string): ArrayBuffer {
     const bytes = chunk(str, 2).map(s => parseInt(s, 16));
     return new Uint8Array(bytes);
+}
+
+function hex2Num(strs: string[]): number[] {
+    return strs.map(s => parseInt(s, 16));
 }
 
 function tilesetLoaded(tileset:Tileset) {
@@ -119,22 +182,22 @@ function drawFilledSquare(im: Image, index: number, x: number, y: number, size: 
     }
 }
 
-function generateTileForBackground(color:string): Image {
+function generateTileForBackground(pal:Palette): Image {
     // Typescript typing is wrong, Image.Format_Indexed8 converts to a number just fine
     // @ts-ignore
     let paletteImage = new Image(8,8,Image.Format_Indexed8);
-    paletteImage.setColorTable(paletteToColor([color]));
+    paletteImage.setColorTable(paletteToColor(pal));
     drawFilledSquare(paletteImage, 0, 0, 0, 8);
     return paletteImage;
 }
 
-function generateTileFromPalette(pal:string[]): Image {
+function generateTileFromPalette(pal:Palette): Image {
     const clear = 0;
     // Typescript typing is wrong, Image.Format_Indexed8 converts to a number just fine
     // @ts-ignore
     let paletteImage = new Image(8,8,Image.Format_Indexed8);
     tiled.log("plaette: " + pal);
-    paletteImage.setColorTable([clear].concat(paletteToColor([pal[1],pal[2],pal[3]])));
+    paletteImage.setColorTable([clear].concat(paletteToColor(pal)));
     paletteImage.fill(0);
     drawFilledSquare(paletteImage, 1, 2, 6, 2);
     drawFilledSquare(paletteImage, 2, 4, 6, 2);
@@ -142,25 +205,25 @@ function generateTileFromPalette(pal:string[]): Image {
     return paletteImage;
 }
 
-function updateTileFromPalette(tile:Tile, pal:string[]) {
+function updateTileFromPalette(tile:Tile, pal:Palette) {
     tile.setImage(generateTileFromPalette(pal));
     for (let j=1; j<4; ++j) {
-        tile.setProperty("Palette Color "+j, pal[j]);
+        tile.setProperty("Palette Color "+j, num2Hexstr(pal.p[j]));
     }
 }
 
-function createPaletteTileset(pal:string[]):Tileset {
+function createPaletteTileset(pal:Palette):Tileset {
     const tileset = new Tileset();
 
     tiled.log("adding new tiles");
     const tile = tileset.addTile();
     tile.setProperty("Palette", "bg");
-    tile.setImage(generateTileForBackground(pal[0]));
-    tile.setProperty("Palette Color", pal[0]);
+    tile.setImage(generateTileForBackground({p: [pal.p[0]], em: pal.em}));
+    tile.setProperty("Palette Color", num2Hexstr(pal.p[0]));
     for (let i=0; i<4; ++i) {
         const tile = tileset.addTile();
         tile.setProperty("Palette", ""+i);
-        updateTileFromPalette(tile, pal.slice(i*4, i*4 + 4));
+        updateTileFromPalette(tile, {p: pal.p.slice(i*4, i*4 + 4), em: pal.em});
     }
     return tileset;
 }
@@ -211,15 +274,18 @@ function createPaletteTileset(pal:string[]):Tileset {
 //     });
 // }
 
-function setMapPalette(map: TileMap, palette: string[]) {
-    map.setProperty(mapPaletteNamePrefix + "bg", palette[0]);
-    map.setProperty(mapPaletteNamePrefix + "0", palette.slice(1,4).join(","));
-    map.setProperty(mapPaletteNamePrefix + "1", palette.slice(5,8).join(","));
-    map.setProperty(mapPaletteNamePrefix + "2", palette.slice(9,12).join(","));
-    map.setProperty(mapPaletteNamePrefix + "3", palette.slice(13,16).join(","));
+function setMapPalette(map: TileMap, palette: Palette) {
+    map.setProperty(mapPaletteNamePrefix + "bg", palette.p[0] + "");
+    map.setProperty(mapPaletteNamePrefix + "0", palette.p.slice(1,4).map(num2Hexstr).join(","));
+    map.setProperty(mapPaletteNamePrefix + "1", palette.p.slice(5,8).map(num2Hexstr).join(","));
+    map.setProperty(mapPaletteNamePrefix + "2", palette.p.slice(9,12).map(num2Hexstr).join(","));
+    map.setProperty(mapPaletteNamePrefix + "3", palette.p.slice(13,16).map(num2Hexstr).join(","));
+    map.setProperty("Emphasize Red",   palette.em.r);
+    map.setProperty("Emphasize Green", palette.em.g);
+    map.setProperty("Emphasize Blue",  palette.em.b);
 }
 
-function getMapPalette(map: TileMap): string[] | undefined {
+function getMapPalette(map: TileMap): Palette | undefined {
     const propBg = map.property(mapPaletteNamePrefix + "bg");
     const prop0 = map.property(mapPaletteNamePrefix + "0");
     const prop1 = map.property(mapPaletteNamePrefix + "1");
@@ -232,8 +298,12 @@ function getMapPalette(map: TileMap): string[] | undefined {
         palette.splice(5, 3, ...prop1.toString().split(","));
         palette.splice(9, 3, ...prop2.toString().split(","));
         palette.splice(13, 3, ...prop3.toString().split(","));
-        if (isValidPalette(palette)) {
-            return palette;
+        const emR = map.property("Emphasize Red")   as boolean;
+        const emG = map.property("Emphasize Green") as boolean;
+        const emB = map.property("Emphasize Blue")  as boolean;
+        const pal = {p: hex2Num(palette), em: new Emphasis(emR, emG, emB)};
+        if (isValidPalette(pal)) {
+            return pal;
         }
     }
     return undefined;
@@ -386,7 +456,7 @@ function unRLE(d: string): string {
 //     },
 // });
 
-function createImageFromCHR(buffer: ArrayBuffer, palette:string[], paletteIdx: number): Image {
+function createImageFromCHR(buffer: ArrayBuffer, palette:Palette, paletteIdx: number): Image {
     const tileCount = buffer.byteLength / 16; // 16 bytes per tile
     const pixelsPerTile = 8;
     const tilesPerRow = 16;
@@ -419,7 +489,7 @@ function createImageFromCHR(buffer: ArrayBuffer, palette:string[], paletteIdx: n
     return im;
 }
 
-function createTilesetFromCHR(buffer: ArrayBuffer, palette:string[], paletteIdx: number): Tileset {
+function createTilesetFromCHR(buffer: ArrayBuffer, palette:Palette, paletteIdx: number): Tileset {
     const tileset = new Tileset();
     tileset.setTileSize(8,8); // must be called before loadFromImage
     const im = createImageFromCHR(buffer, palette, paletteIdx);
@@ -456,16 +526,18 @@ tiled.registerMapFormat("nexxt", {
 
         const map = new TileMap();
         map.setTileSize(8, 8);
-        const width = parseInt(nss.get("VarSpriteGridX"));
-        const height = parseInt(nss.get("VarSpriteGridY"));
+        const width = parseInt(nss.get("VarNameW"));
+        const height = parseInt(nss.get("VarNameH"));
         map.setSize(width, height);
         // Palette has 4 different palettes "A,B,C,D" selected by the user
         // The field isn't RLE encoded, so its a fixed length of 16 (num bytes in palette) * 2 (ascii hex byte length) * 4
 
         const palettes:string[] = [];
 
-        const paletteIdx = parseInt(nss.get("VarPalActive")) - 1;
-        const pal = chunk(nss.get("Palette").slice(paletteIdx*32, (paletteIdx+1)*32), 2);
+        const palnum = hex2Num(chunk(unRLE(nss.get("Palette")).slice(0, 32), 2));
+        const ppuMask = parseInt(nss.get("VarPPUMask"),10);
+        const em = new Emphasis((ppuMask&(1<<7))>0, (ppuMask&(1<<6))>0, (ppuMask&(1<<5))>0);
+        const pal = {p: palnum, em: em};
         setMapPalette(map, pal);
         const paletteTileset = createPaletteTileset(pal);
         paletteTileset.name = "Palette";
@@ -505,7 +577,6 @@ tiled.registerMapFormat("nexxt", {
                 const yshift = ((y % 4) < 2) ? 0 : 4;
                 const mask = 0b11 << (xshift + yshift);
                 const palette = (attrtable[coarseIdx] & mask) >> (xshift + yshift);
-                tiled.log(`x: ${x} y: ${y} idx: ${coarseIdx} attr: ${attrtable[coarseIdx]} table: ${palette}`);
                 attrs[y][x] = palette;
                 attrEdit.setTile(x, y, paletteTileset.tile(palette+1));
             }
