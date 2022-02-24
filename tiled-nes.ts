@@ -553,7 +553,7 @@ tiled.registerMapFormat("nexxt", {
         //     // map.addTileset(palette);
         // }
 
-        // CHRMain is an ASCII RLE encoded hex string containing the A pattern table. (B is in CHRCopy)
+        // CHRMain is an ASCII RLE encoded hex string containing the A and B pattern table. 
         const chrBuffer = hexstrToBytes(unRLE(nss.get("CHRMain")));
         const chrs:Tileset[] = [];
         for (let i=0; i<4; ++i) {
