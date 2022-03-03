@@ -106,7 +106,7 @@ function isValidPalette(pal: Palette) {
     if (pal.p.length != 16) {
         return false;
     }
-    if (pal.p.filter(s => lookupPaletteToColor[s] !== undefined).length != 16) {
+    if (paletteToColor(pal).length != 16) {
         return false;
     }
     return true;
@@ -196,7 +196,6 @@ function generateTileFromPalette(pal:Palette): Image {
     // Typescript typing is wrong, Image.Format_Indexed8 converts to a number just fine
     // @ts-ignore
     let paletteImage = new Image(8,8,Image.Format_Indexed8);
-    tiled.log("plaette: " + pal);
     paletteImage.setColorTable([clear].concat(paletteToColor(pal)));
     paletteImage.fill(0);
     drawFilledSquare(paletteImage, 1, 2, 6, 2);
@@ -275,7 +274,7 @@ function createPaletteTileset(pal:Palette):Tileset {
 // }
 
 function setMapPalette(map: TileMap, palette: Palette) {
-    map.setProperty(mapPaletteNamePrefix + "bg", palette.p[0] + "");
+    map.setProperty(mapPaletteNamePrefix + "bg", num2Hexstr(palette.p[0]));
     map.setProperty(mapPaletteNamePrefix + "0", palette.p.slice(1,4).map(num2Hexstr).join(","));
     map.setProperty(mapPaletteNamePrefix + "1", palette.p.slice(5,8).map(num2Hexstr).join(","));
     map.setProperty(mapPaletteNamePrefix + "2", palette.p.slice(9,12).map(num2Hexstr).join(","));
@@ -302,10 +301,12 @@ function getMapPalette(map: TileMap): Palette | undefined {
         const emG = map.property("Emphasize Green") as boolean;
         const emB = map.property("Emphasize Blue")  as boolean;
         const pal = {p: hex2Num(palette), em: new Emphasis(emR, emG, emB)};
+        tiled.log(`pal: ${pal.p.map(num2Hexstr)}`);
         if (isValidPalette(pal)) {
             return pal;
         }
     }
+    tiled.log("Invalid palette why? ");
     return undefined;
 }
 
@@ -489,12 +490,15 @@ function createImageFromCHR(buffer: ArrayBuffer, palette:Palette, paletteIdx: nu
     return im;
 }
 
-function createTilesetFromCHR(buffer: ArrayBuffer, palette:Palette, paletteIdx: number): Tileset {
-    const tileset = new Tileset();
+function createTilesetFromCHR(chrfile: string, buffer: ArrayBuffer, palette:Palette, paletteIdx: number): Tileset {
+    const tileset = new Tileset(`CHR (Pal ${paletteIdx+1})`);
     tileset.setTileSize(8,8); // must be called before loadFromImage
     const im = createImageFromCHR(buffer, palette, paletteIdx);
-    tileset.loadFromImage(im);
+    const fname = `${chrfile}_pal${paletteIdx}.png`;
+    im.save(fname, "png");
+    tileset.loadFromImage(im, fname);
     tileset.setProperty("isCHRTileset", true);
+    tileset.setProperty("CHR File", tiled.filePath(chrfile));
     return tileset;
 }
 
@@ -517,22 +521,43 @@ function createTilesetFromCHR(buffer: ArrayBuffer, palette:Palette, paletteIdx: 
 //     },
 // });
 
+function loadCHR(filename: string, chrBuffer: ArrayBuffer, pal: Palette): Tileset[] {
+    // CHRMain is an ASCII RLE encoded hex string containing the A and B pattern table.
+    // write the file to a cache location so we can reference the file on disk later
+    const fname = filename.substring(filename.lastIndexOf('/')+1);
+    const chrfilename = `${tiled.extensionsPath}/tiled_nes_cache_${fname}.chr`;
+    const chrfile = new BinaryFile(chrfilename, BinaryFile.WriteOnly);
+    chrfile.write(chrBuffer);
+    chrfile.commit();
+    const chrs:Tileset[] = [];
+    for (let i=0; i<4; ++i) {
+        const chr = createTilesetFromCHR(chrfilename, chrBuffer, pal, i);
+        chrs.push(chr);
+    }
+    return chrs;
+}
+
+function readNSSFile(filename: string): Map<string, string> {    
+    const file = new TextFile(filename, TextFile.ReadOnly);
+    const nss = new Map(file.readAll().split("\n").filter(s => s.includes("=")).map(s => s.split("=")).map(s => [s[0], s[1]]));
+    file.close();
+    return nss;
+}
+
 tiled.registerMapFormat("nexxt", {
     name: "NEXXT Session",
     extension: "nss",
     read: (filename: string) => {
-        const file = new TextFile(filename, TextFile.ReadOnly);
-        const nss = new Map(file.readAll().split("\n").filter(s => s.includes("=")).map(s => s.split("=")).map(s => [s[0], s[1]]));
+        const nss = readNSSFile(filename);
 
         const map = new TileMap();
         map.setTileSize(8, 8);
         const width = parseInt(nss.get("VarNameW"));
         const height = parseInt(nss.get("VarNameH"));
         map.setSize(width, height);
+        map.setProperty("NSS File", tiled.filePath(filename));
         // Palette has 4 different palettes "A,B,C,D" selected by the user
         // The field isn't RLE encoded, so its a fixed length of 16 (num bytes in palette) * 2 (ascii hex byte length) * 4
-
-        const palettes:string[] = [];
 
         const palnum = hex2Num(chunk(unRLE(nss.get("Palette")).slice(0, 32), 2));
         const ppuMask = parseInt(nss.get("VarPPUMask"),10);
@@ -553,21 +578,15 @@ tiled.registerMapFormat("nexxt", {
         //     // map.addTileset(palette);
         // }
 
-        // CHRMain is an ASCII RLE encoded hex string containing the A and B pattern table. 
-        const chrBuffer = hexstrToBytes(unRLE(nss.get("CHRMain")));
-        const chrs:Tileset[] = [];
-        for (let i=0; i<4; ++i) {
-            const chr = createTilesetFromCHR(chrBuffer, pal, i);
-            chr.name = `CHR (Pal ${i+1})`;
-            chrs.push(chr);
-            map.addTileset(chr);
-        }
+        const chrs = loadCHR(filename, hexstrToBytes(unRLE(nss.get("CHRMain"))), pal);
+        chrs.forEach(c => map.addTileset(c));
         
         // Attribute data is a ASCII RLE encoded hex string that contains the raw PPU attribute table
         const attrtable = new Uint8Array(hexstrToBytes(unRLE(nss.get("AttrTable"))));
         // Expand the attribute table into 8x8 mapping for the map size
         const attrs:number[][] = Array.from(Array(height), () => new Array(width));
         const attrLayer = new TileLayer("Attribute");
+        attrLayer.visible = false;
         const attrEdit = attrLayer.edit();
         for (let y = 0; y < height; ++y) {
             for (let x = 0; x < width; ++x) {
@@ -601,6 +620,17 @@ tiled.registerMapFormat("nexxt", {
         return map;
     }
 })
+
+const reloadCHRAction = tiled.registerAction("ReloadCHR", action => {
+    const map = tiled.activeAsset as TileMap;
+    const filename = map.property("NSS File").toString();
+    const nss = readNSSFile(filename);
+    
+    const chrs = loadCHR(filename, hexstrToBytes(unRLE(nss.get("CHRMain"))), getMapPalette(map));
+});
+reloadCHRAction.enabled = true;
+reloadCHRAction.text = "Reload CHR"
+reloadCHRAction.iconVisibleInMenu = false;
 
 // const loadPaletteAction = tiled.registerAction("ApplyPalette", action => {
 //     // This menu action is on the Map menu, so we must be on a TileMap to use it...
@@ -641,11 +671,11 @@ for (let i=0; i<4; ++i) {
 }
 
 tiled.extendMenu("Map", [
-    // { action: "ApplyPalette", before: "MapProperties" },
-    { action: "Palette0", before: "MapProperties" },
-    { action: "Palette1"},
-    { action: "Palette2"},
-    { action: "Palette3"},
+    { action: "ReloadCHR", before: "MapProperties" },
+    { action: "Palette0" },
+    { action: "Palette1" },
+    { action: "Palette2" },
+    { action: "Palette3" },
     { separator: true },
 ]);
 
