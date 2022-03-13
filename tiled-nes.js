@@ -4,8 +4,6 @@ const tileLayerName = "Tile";
 const defaultLayerNames = [tileLayerName, attributeLayerName];
 const mapPaletteNamePrefix = "Palette ";
 const attributeTilesetName = "Palette";
-let globalPalette = new Array(16);
-let globalPalettePath;
 function num2Hexstr(num) {
     return ("0" + num.toString(16)).slice(-2);
 }
@@ -63,9 +61,6 @@ const lookupPaletteToColor = [
 function paletteToColor(pal) {
     return pal.p.map(n => lookupPaletteToColor[pal.em.get()][n]);
 }
-function paletteifyTileset(tileset) {
-    let image = new Image(tileset.image);
-}
 function isValidPalette(pal) {
     if (!pal.p) {
         return false;
@@ -83,7 +78,7 @@ function chunk(str, size) {
 }
 function hexstrToBytes(str) {
     const bytes = chunk(str, 2).map(s => parseInt(s, 16));
-    return new Uint8Array(bytes);
+    return Uint8Array.from(bytes).buffer;
 }
 function hex2Num(strs) {
     return strs.map(s => parseInt(s, 16));
@@ -166,13 +161,14 @@ function getMapPalette(map) {
             return pal;
         }
     }
-    tiled.log("Invalid palette why? ");
     return undefined;
 }
-function mapRegionEdited(map, layer, r) {
+function mapRegionEdited(r, layer) {
+    tiled.log("edited");
     if (layer.name == attributeLayerName) {
-        for (let rect of r.rects) {
-        }
+        tiled.log("undoing");
+        layer.map.undo();
+        return;
     }
 }
 function getLayerIfExists(map, name) {
@@ -293,8 +289,9 @@ tiled.registerMapFormat("nexxt", {
         chrs.forEach(c => map.addTileset(c));
         const attrtable = new Uint8Array(hexstrToBytes(unRLE(nss.get("AttrTable"))));
         const attrs = Array.from(Array(height), () => new Array(width));
-        const attrLayer = new TileLayer("Attribute");
+        const attrLayer = new TileLayer(attributeLayerName);
         attrLayer.visible = false;
+        attrLayer.locked = true;
         const attrEdit = attrLayer.edit();
         for (let y = 0; y < height; ++y) {
             for (let x = 0; x < width; ++x) {
@@ -323,7 +320,10 @@ tiled.registerMapFormat("nexxt", {
         map.addLayer(bgLayer);
         map.addLayer(attrLayer);
         return map;
-    }
+    },
+    write: (map, filename) => {
+        return "";
+    },
 });
 const reloadCHRAction = tiled.registerAction("ReloadCHR", action => {
     const map = tiled.activeAsset;
@@ -352,4 +352,19 @@ tiled.extendMenu("Map", [
     { action: "Palette3" },
     { separator: true },
 ]);
+function assetLoaded(asset) {
+    tiled.log(`asset loaded ${asset.fileName}`);
+    if (asset.isTileset) {
+        const tileset = asset;
+    }
+    else if (asset.isTileMap) {
+        if (asset.property("NSS File") === undefined) {
+            tiled.error("TileMap was not loaded from a NSS file", () => { });
+        }
+        const map = asset;
+        map.regionEdited.connect(mapRegionEdited);
+        tiled.log("connected");
+    }
+}
+tiled.assetOpened.connect(assetLoaded);
 //# sourceMappingURL=tiled-nes.js.map

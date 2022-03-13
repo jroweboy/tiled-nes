@@ -9,17 +9,6 @@ const defaultLayerNames = [tileLayerName,attributeLayerName];
 const mapPaletteNamePrefix = "Palette ";
 const attributeTilesetName = "Palette";
 
-let globalPalette:string[] = new Array(16);
-let globalPalettePath:string;
-
-// Crystalis town palettes because i just needed something here
-// const defaultPalette : string[] = [
-//     "19", "27", "16", "0f",
-//     "19", "20", "28", "0f",
-//     "19", "3a", "1b", "0f",
-//     "19", "30", "11", "0f",
-// ];
-
 function num2Hexstr(num: number): string {
     return ("0" + num.toString(16)).slice(-2);
 }
@@ -94,10 +83,6 @@ function paletteToColor(pal: Palette): number[] {
     return pal.p.map(n => lookupPaletteToColor[pal.em.get()][n]);
 }
 
-function paletteifyTileset(tileset: Tileset) {
-    let image = new Image(tileset.image);
-}
-
 function isValidPalette(pal: Palette) {
     if (!pal.p) {
         return false;
@@ -118,7 +103,7 @@ function chunk(str: string, size: number): string[] {
 
 function hexstrToBytes(str: string): ArrayBuffer {
     const bytes = chunk(str, 2).map(s => parseInt(s, 16));
-    return new Uint8Array(bytes);
+    return Uint8Array.from(bytes).buffer;
 }
 
 function hex2Num(strs: string[]): number[] {
@@ -128,51 +113,6 @@ function hex2Num(strs: string[]): number[] {
 function tilesetLoaded(tileset:Tileset) {
     tiled.log("Loading tileset");
 }
-
-// function initMapLayers(map:TileMap) {
-//     let tileLayer = getLayerIfExists(map, tileLayerName);
-//     if (!tileLayer || !tileLayer.isTileLayer) {
-//         tiled.log("Map doesn't have " + tileLayerName + " layer. Adding now");
-//         tileLayer = new TileLayer(tileLayerName);
-//         map.addLayer(tileLayer);
-//     }
-//     let attributeLayer = getLayerIfExists(map, attributeLayerName);
-//     if (!attributeLayer || !attributeLayer.isTileLayer) {
-//         tiled.log("Map doesn't have " + attributeLayerName + " layer. Adding now");
-//         attributeLayer = new TileLayer(attributeLayerName);
-//         const atl : TileLayer = attributeLayer as TileLayer;
-//         map.addLayer(atl);
-//         // set the layer to locked to hopefully slow down user level editing (for now)
-//         atl.locked = true;
-//         atl.visible = false;
-//         // find the first attribute tile and fill the layer with it
-//         const attrtiles = map.tilesets.find(ts => ts.name == attributeTilesetName);
-//         const defaultPaletteTile = attrtiles.tiles.find(tile => tile.resolvedProperty("Palette").toString() == "0");
-//         const editor = atl.edit();
-//         for (let w=0; w<atl.width; ++w) {
-//             for (let h=0; h<atl.height; ++h) {
-//                 editor.setTile(w, h, defaultPaletteTile);
-//             }
-//         }
-//         editor.apply();
-//     }
-//     let width = attributeLayer.resolvedProperty("AttributeWidth");
-//     if (!width || !(parseInt(width.toString()))) {
-//         attributeLayer.setProperty("AttributeWidth", 16);
-//     }
-//     let height = attributeLayer.resolvedProperty("AttributeHeight");
-//     if (!height || !(parseInt(height.toString()))) {
-//         attributeLayer.setProperty("AttributeHeight", 16);
-//     }
-//     let offsetX = attributeLayer.resolvedProperty("AttributeOffsetX");
-//     if (!offsetX || !(parseInt(offsetX.toString()))) {
-//         attributeLayer.setProperty("AttributeOffsetX", 0);
-//     }
-//     let offsetY = attributeLayer.resolvedProperty("AttributeOffsetY");
-//     if (!offsetY || !(parseInt(offsetY.toString()))) {
-//         attributeLayer.setProperty("AttributeOffsetY", 0);
-//     }
-// }
 
 function drawFilledSquare(im: Image, index: number, x: number, y: number, size: number) {
     for (let i=x; i<x+size; ++i) {
@@ -227,52 +167,6 @@ function createPaletteTileset(pal:Palette):Tileset {
     return tileset;
 }
 
-// function createOrUpdateMapPalette(map:TileMap) {
-//     const tileset = map.tilesets.find(ts => ts.name == attributeTilesetName);
-//     if (!tileset) {
-//         tiled.log("Tileset missing, creating new one");
-//         const globalPalette = createPaletteTileset(defaultPalette);
-//         globalPalette.name = attributeTilesetName;
-//         map.setProperty(mapPaletteNamePrefix + "bg", defaultPalette[0]);
-//         map.setProperty(mapPaletteNamePrefix + "0", defaultPalette.slice(1,4).join(","));
-//         map.setProperty(mapPaletteNamePrefix + "1", defaultPalette.slice(5,8).join(","));
-//         map.setProperty(mapPaletteNamePrefix + "2", defaultPalette.slice(9,12).join(","));
-//         map.setProperty(mapPaletteNamePrefix + "3", defaultPalette.slice(13,16).join(","));
-//         map.addTileset(globalPalette);
-//     }
-
-//     // tiled.log("updating palette tileset");
-//     // for (let i=0; i<4; ++i) {
-//     //     const tile = tileset.tiles.find(t => t.resolvedProperty("Palette").toString() == ""+i);
-//     //     updateTileFromPalette(tile, pal.slice(i*4, i*4 + 4));
-//     // }
-// }
-
-// function reloadCHRAfterPaletteChange(map: TileMap) {
-//     map.usedTilesets().forEach( ts => {
-//         tiled.log("applying palette to image");
-//         // const propBg = map.property(mapPaletteNamePrefix + "bg");
-//         // const prop0 = map.property(mapPaletteNamePrefix + "0");
-//         // const prop1 = map.property(mapPaletteNamePrefix + "1");
-//         // const prop2 = map.property(mapPaletteNamePrefix + "2");
-//         // const prop3 = map.property(mapPaletteNamePrefix + "3");
-//         // tiled.log(`props: ${propBg} ${prop0} ${prop1} ${prop2} ${prop3}`);
-//         const palette = getMapPalette(map);
-//         if (!palette) {
-//             tiled.log("could not validate palette");
-//             return;
-//         }
-//         const colorTable = paletteToColor(palette);
-//         tiled.log(`setting to color table: ${colorTable} tsFilename: ${ts.fileName}`);
-//         const file = new BinaryFile(ts.fileName, BinaryFile.ReadOnly);
-//         const buffer = file.readAll();
-//         file.close();
-//         const im = createImageFromCHR(buffer);
-//         im.setColorTable(colorTable);
-//         ts.loadFromImage(im, ts.image);
-//     });
-// }
-
 function setMapPalette(map: TileMap, palette: Palette) {
     map.setProperty(mapPaletteNamePrefix + "bg", num2Hexstr(palette.p[0]));
     map.setProperty(mapPaletteNamePrefix + "0", palette.p.slice(1,4).map(num2Hexstr).join(","));
@@ -306,29 +200,19 @@ function getMapPalette(map: TileMap): Palette | undefined {
             return pal;
         }
     }
-    tiled.log("Invalid palette why? ");
     return undefined;
 }
 
-function mapRegionEdited(map: TileMap, layer: TileLayer, r:region) {
+function mapRegionEdited(r:region, layer: TileLayer) {
+    tiled.log("edited");
     if (layer.name == attributeLayerName) {
-        for (let rect of r.rects) {
-            // rect.
-        }
+        // temporarily prevent editing the attribute directly
+        tiled.log("undoing");
+        layer.map.undo();
+        return;
     }
+
 }
-
-// function mapModified(map: TileMap) {
-//     tiled.log(`map modified: ${map.fileName}`);
-//     reloadCHRAfterPaletteChange(map);
-// }
-
-// function newMapLoaded(map:TileMap) {
-//     tiled.log("Loading map");
-//     createOrUpdateMapPalette(map);
-//     initMapLayers(map);
-//     map.modifiedChanged.connect(() => mapModified(map));
-// }
 
 function getLayerIfExists(map:TileMap, name:string):Layer | undefined {
     let layer = map.layers.find(lay => lay.name == name);
@@ -351,44 +235,6 @@ function isMapDirty(map:TileMap): boolean {
     }
     return false;
 }
-
-// function getCurrentMapPaletteOrDefault(): string[] {
-//     const current = tiled.activeAsset;
-//     if (current && current.isTileMap) {
-//         const pal = getMapPalette(current as TileMap);
-//         if (pal) {
-//             return pal;
-//         }
-//     }
-//     return defaultPalette;
-// }
-
-// function assetLoaded(asset:Asset) {
-//     tiled.log(`asset loaded ${asset.fileName}`);
-//     if (asset.isTileset) {
-//         const tileset = asset as Tileset;
-//         // if (isPalette(tileset)) {
-//         //     // create or update global palette.
-//         // }
-//         // asset.macro("Generating NES Tileset", () => tilesetLoaded(asset as Tileset));
-//     } else if (asset.isTileMap) {
-//         const map = asset as TileMap;
-//         map.modifiedChanged.connect(() => mapModified(map));
-//         if (isMapDirty(map)) {
-//             asset.macro("Generating NES Tilemap", () => newMapLoaded(asset as TileMap));
-//         }
-//         // The regionEdited signal is documented incorrectly. It sends two params (but typesig only mentions one)
-//         // @ts-ignore
-//         map.regionEdited.connect((r:region, l: TileLayer) => mapRegionEdited(map, l, r));
-//         map.usedTilesets().forEach(ts => {
-//             if (ts.property("isCHRTileset")) {
-//                 // Force a reload to get the original image added to the CHR cache
-//                 // tiled.log(`forcing a reload for ${ts.name}`);
-//                 // tiled.open(ts.fileName);
-//             }
-//         });
-//     }
-// }
 
 /**
  * Text based RLE decoder. There are two types of tokens in this format.
@@ -417,45 +263,6 @@ function unRLE(d: string): string {
     }
     return buffer;
 }
-
-// tiled.registerTilesetFormat("nespal", {
-//     name: "NES Palette",
-//     extension: "pal",
-
-//     read: (filename) => {
-//         const file = new BinaryFile(filename, BinaryFile.ReadOnly);
-//         const buffer = file.readAll();
-//         file.close();
-//         if (buffer.byteLength != 16) {
-//             tiled.error("Imported NES Palette is not 16 bytes!", () => {});
-//             return null;
-//         }
-//         const palette = new Uint8Array(buffer, 0, 16);
-//         const hex = Array.from(palette).map( v => ("0" + v.toString(16)).slice(-2) );
-//         const tileset = createPaletteTileset(hex);
-//         return tileset;
-//     },
-//     write: (tileset, filename) => {
-//         const bgtile = tileset.tiles.find( tile => tile.property("Palette").toString() == "bg");
-//         const bgcolor = parseInt(bgtile.property("Palette Color").toString(), 16);
-//         const bytes = new ArrayBuffer(16);
-//         const buffer = new Uint8Array(bytes);
-//         for (let i=0; i<4; ++i) {
-//             const palette = tileset.tiles.find( tile => tile.property("Palette").toString() == ""+i);
-//             buffer[i*4] = bgcolor;
-//             for (let j=1; j<4; ++j) {
-//                 const color = palette.property("Palette Color "+j).toString();
-//                 const val = parseInt(color, 16);
-//                 buffer[i*4+j] = val;
-//             }
-//         }
-        
-//         const file = new BinaryFile(filename, BinaryFile.WriteOnly);
-//         file.write(bytes);
-//         file.commit();
-//         return "";
-//     },
-// });
 
 function createImageFromCHR(buffer: ArrayBuffer, palette:Palette, paletteIdx: number): Image {
     const tileCount = buffer.byteLength / 16; // 16 bytes per tile
@@ -502,25 +309,6 @@ function createTilesetFromCHR(chrfile: string, buffer: ArrayBuffer, palette:Pale
     return tileset;
 }
 
-// tiled.registerTilesetFormat("neschr", {
-//     name: "NES CHR",
-//     extension: "chr",
-//     read: (filename) => {
-//         const file = new BinaryFile(filename, BinaryFile.ReadOnly);
-//         const buffer = file.readAll();
-//         file.close();
-//         tiled.log(`loading chr: ${filename}`);
-//         const tileset = createTilesetFromCHR(buffer)
-//         tileset.name = filename.substring(filename.lastIndexOf('/')+1);
-//         tileset.image = filename;
-//         return tileset;
-//     },
-//     write: (tileset, filename) => {
-//         // Don't write any changes intentionally since we don't support updating CHR files.
-//         return "";
-//     },
-// });
-
 function loadCHR(filename: string, chrBuffer: ArrayBuffer, pal: Palette): Tileset[] {
     // CHRMain is an ASCII RLE encoded hex string containing the A and B pattern table.
     // write the file to a cache location so we can reference the file on disk later
@@ -544,6 +332,20 @@ function readNSSFile(filename: string): Map<string, string> {
     return nss;
 }
 
+// Quick script that will print out all of the tilesets in use for each layer
+// (tiled.activeAsset as TileMap).layers.forEach(
+//     (layer) => {
+//         if (layer.isTileLayer)
+//             tiled.log(`TileLayer ${layer.name}: ${Array.from((layer as TileLayer).region().rects.map(
+//                 (rect) => Array.from({length: rect.width}, (_, i) => rect.x + i)
+//                         .map(c => Array.from({length: rect.height}, (_, j) => rect.y + j).map(d => [c, d])).reduce((x,y) => x.concat(y), [])
+//             ).reduce((x,y) => x.concat(y), [])
+//             .map((coords: number[]) => (layer as TileLayer).tileAt(coords[0], coords[1]))
+//             .filter((tile: Tile | null) => tile !== null)
+//             .map((tile: Tile) => new Set([tile.tileset.name]))
+//             .reduce((prev: Set<string>, curr: Set<string>) => prev.add(curr.values().next().value), new Set<string>())).join(', ')}`)
+//     });
+
 tiled.registerMapFormat("nexxt", {
     name: "NEXXT Session",
     extension: "nss",
@@ -558,7 +360,6 @@ tiled.registerMapFormat("nexxt", {
         map.setProperty("NSS File", tiled.filePath(filename));
         // Palette has 4 different palettes "A,B,C,D" selected by the user
         // The field isn't RLE encoded, so its a fixed length of 16 (num bytes in palette) * 2 (ascii hex byte length) * 4
-
         const palnum = hex2Num(chunk(unRLE(nss.get("Palette")).slice(0, 32), 2));
         const ppuMask = parseInt(nss.get("VarPPUMask"),10);
         const em = new Emphasis((ppuMask&(1<<7))>0, (ppuMask&(1<<6))>0, (ppuMask&(1<<5))>0);
@@ -567,16 +368,6 @@ tiled.registerMapFormat("nexxt", {
         const paletteTileset = createPaletteTileset(pal);
         paletteTileset.name = "Palette";
         map.addTileset(paletteTileset);
-        // const paletteTileset = new Tileset();
-        // paletteTileset.name = "Palette";
-        // for (let i=0; i<4; ++i) {
-        //     const pal = chunk(nss.get("Palette").slice(i*32, (i+1)*32), 2);
-        //     // const palette = createPaletteTileset(pal);
-        //     // palette.name = `Palette ${i+1}`;
-        //     palettes.push(pal.join(","));
-        //     // palette.setProperty("Palette", pal.join(","));
-        //     // map.addTileset(palette);
-        // }
 
         const chrs = loadCHR(filename, hexstrToBytes(unRLE(nss.get("CHRMain"))), pal);
         chrs.forEach(c => map.addTileset(c));
@@ -585,8 +376,9 @@ tiled.registerMapFormat("nexxt", {
         const attrtable = new Uint8Array(hexstrToBytes(unRLE(nss.get("AttrTable"))));
         // Expand the attribute table into 8x8 mapping for the map size
         const attrs:number[][] = Array.from(Array(height), () => new Array(width));
-        const attrLayer = new TileLayer("Attribute");
+        const attrLayer = new TileLayer(attributeLayerName);
         attrLayer.visible = false;
+        attrLayer.locked = true;
         const attrEdit = attrLayer.edit();
         for (let y = 0; y < height; ++y) {
             for (let x = 0; x < width; ++x) {
@@ -617,8 +409,14 @@ tiled.registerMapFormat("nexxt", {
         bgEdit.apply();
         map.addLayer(bgLayer);
         map.addLayer(attrLayer);
+        // The signal is improperly documented, its actually two parameters
+        // @ts-ignore
+        // map.regionEdited.connect(mapRegionEdited)
         return map;
-    }
+    },
+    write: (map: TileMap, filename: string): string => {
+        return "";
+    },
 })
 
 const reloadCHRAction = tiled.registerAction("ReloadCHR", action => {
@@ -631,32 +429,6 @@ const reloadCHRAction = tiled.registerAction("ReloadCHR", action => {
 reloadCHRAction.enabled = true;
 reloadCHRAction.text = "Reload CHR"
 reloadCHRAction.iconVisibleInMenu = false;
-
-// const loadPaletteAction = tiled.registerAction("ApplyPalette", action => {
-//     // This menu action is on the Map menu, so we must be on a TileMap to use it...
-//     // TODO double check for sanity in case they weasle around that with the console.
-//     const map = tiled.activeAsset as TileMap;
-//     reloadCHRAfterPaletteChange(map);
-// });
-// loadPaletteAction.enabled = false;
-// loadPaletteAction.text = "Apply Global Palette";
-// loadPaletteAction.iconVisibleInMenu = false;
-
-// const setPaletteAction = tiled.registerAction("SetPalette", action => {
-//     const pal = tiled.activeAsset as Tileset;
-//     for (let i=0; i < 4; ++i) {
-//         globalPalette[i*4] = pal.tiles.find(t => t.property("Palette") == "bg").property("Palette Color").toString();
-//         globalPalette[i*4+1] = pal.tiles.find(t => t.property("Palette") == ""+i).property("Palette Color 1").toString();
-//         globalPalette[i*4+2] = pal.tiles.find(t => t.property("Palette") == ""+i).property("Palette Color 2").toString();
-//         globalPalette[i*4+3] = pal.tiles.find(t => t.property("Palette") == ""+i).property("Palette Color 3").toString();
-//     }
-//     globalPalettePath = pal.fileName;
-//     loadPaletteAction.enabled = true;
-// });
-
-// setPaletteAction.enabled = true;
-// setPaletteAction.text = "Set As Global Palette";
-// setPaletteAction.iconVisibleInMenu = false;
 
 for (let i=0; i<4; ++i) {
     const action = tiled.registerAction("Palette"+i, (action) => {
@@ -683,6 +455,26 @@ tiled.extendMenu("Map", [
 //     { action: "SetPalette", before: "TilesetProperties" },
 //     { separator: true },
 // ])
+function assetLoaded(asset:Asset) {
+    tiled.log(`asset loaded ${asset.fileName}`);
+    if (asset.isTileset) {
+        const tileset = asset as Tileset;
+        // if (isPalette(tileset)) {
+        //     // create or update global palette.
+        // }
+        // asset.macro("Generating NES Tileset", () => tilesetLoaded(asset as Tileset));
+    } else if (asset.isTileMap) {
+        if (asset.property("NSS File") === undefined) {
+            // TODO remove these restrictions
+            tiled.error("TileMap was not loaded from a NSS file", () => {});
+        }
+        const map = asset as TileMap;
+        // The regionEdited signal is documented incorrectly. It sends two params (but typesig only mentions one)
+        // @ts-ignore
+        map.regionEdited.connect(mapRegionEdited);
+        tiled.log("connected");
+    }
+}
 
 // tiled.assetCreated.connect(assetLoaded);
-// tiled.assetOpened.connect(assetLoaded);
+tiled.assetOpened.connect(assetLoaded);
